@@ -1,7 +1,7 @@
-#define CONNECTING = 0 ;
-#define OPEN = 1 ;
-#define CLOSING = 2 ;
-#define CLOSED = 3 ;
+#define CONNECTING 0 ;
+#define OPEN 1 ;
+#define CLOSING 2 ;
+#define CLOSED 3 ;
 
 typedef struct _ws_event {
 
@@ -9,7 +9,9 @@ typedef struct _ws_event {
 
 } ws_event ;
 
-typedef struct _web_socket {
+typedef struct _web_socket web_socket ;
+
+struct _web_socket {
 
   /*
     Websocket API, from http://www.w3.org/TR/websockets/
@@ -48,4 +50,4 @@ typedef struct _web_socket {
   long _buffered_amount ;
   char * _protocol ;
   
-} web_socket;
+} ;
