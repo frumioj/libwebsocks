@@ -10,6 +10,7 @@ typedef struct _ws_event {
 } ws_event ;
 
 typedef struct _web_socket web_socket ;
+typedef void websocket_on_open( struct _web_socket * ) ;
 
 struct _web_socket {
 
@@ -22,7 +23,7 @@ struct _web_socket {
     other than the "base"
    */
 
-  void (*on_open)( struct _web_socket *self ) ;
+  websocket_on_open *on_open ;
   void (*on_message)( struct _web_socket *self, struct _ws_event *event ) ;
   void (*on_close)( struct _web_socket *self ) ;
   void (*on_error)( struct _web_socket *self ) ;

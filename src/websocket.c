@@ -7,11 +7,15 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 
+#include "utils.h"
+#include "cencode.h"
+#include "http_request.h"
 #include "websocket.h"
 
 #define SCHEME_DELIM "://"
 #define PORT_DELIM ":"
 #define BUFSIZE 1024
+#define NONCE_SIZE 16
 
 web_socket *websocket_new( void ){
   return (struct _web_socket *) malloc( sizeof( struct _web_socket )) ;
@@ -20,10 +24,14 @@ web_socket *websocket_new( void ){
 void websocket_init( web_socket *self, char *ws_uri ){
 
   char *aport = strdup( strstr( ws_uri, SCHEME_DELIM ) + strlen( SCHEME_DELIM ) ) ;
+  char *host = strdup( aport ) ;
   char *address = strtok( aport, PORT_DELIM ) ; 
   char buf[BUFSIZE] ;
+  char *b64nonce = base64_encode( nonce( NONCE_SIZE ) ) ;
 
   puts( address ) ;
+  puts( b64nonce ) ;
+
   char *port = strdup(strrchr( ws_uri, ':' ) + 1) ; 
   self->_url = ws_uri ;
   puts( port ) ;
@@ -57,9 +65,26 @@ void websocket_init( web_socket *self, char *ws_uri ){
     exit(0) ;
   }
 
-  char *request = "GET / HTTP/1.1\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\nHost: localhost:8080\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://localhost:8080\r\nSec-WebSocket-Version: 13\r\n\r\n" ;
+  char *hrequest =
+     "GET / HTTP/1.1\r\n"
+     "Upgrade: WebSocket\r\n"
+     "Connection: Upgrade\r\n"
+     "Host: localhost:8080\r\n"
+     "Sec-WebSocket-Key: 42VhyIDNJjphjqRMidI1Tw==\r\n" 
+     "Sec-WebSocket-Version: 13\r\n"
+     "\r\n" ;
 
-  int n = write(sockfd, request, strlen(request));
+  http_request *request = http_request_new() ;
+  http_request_init( request, GET, ws_uri ) ;
+  http_request_set_header( request, "Upgrade", "WebSocket" ) ;
+  http_request_set_header( request, "Connection", "Upgrade" ) ;
+  http_request_set_header( request, "Host", host ) ;
+  http_request_set_header( request, "Sec-WebSocket-Version", "13" ) ;
+  http_request_set_header( request, "Sec-WebSocket-Key", b64nonce ) ;
+
+  char *http_request = http_request_as_string( request ) ;
+
+  int n = write(sockfd, hrequest, strlen(hrequest));
 
   if (n < 0) 
     fprintf(stderr,"ERROR writing to socket\n");
@@ -71,7 +96,10 @@ void websocket_init( web_socket *self, char *ws_uri ){
   if (n < 0) 
     fprintf(stderr, "ERROR reading from socket\n");
 
-(self->on_open)(self) ;
+  if ( self->on_open ){
+    self->on_open(self) ;
+  }
+
   printf("Echo from server: %s", buf);
   close(sockfd);
 
@@ -102,3 +130,4 @@ void websocket_send( web_socket *self, char *message ){
 
    */
 }
+
