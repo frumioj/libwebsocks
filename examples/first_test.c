@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <websocket.h>
+#include <cencode.h>
 
 static void on_open( web_socket *ws ){
   printf("on open called!\n") ;
@@ -10,7 +11,8 @@ static void on_open( web_socket *ws ){
 int main(int argc, char *argv[ ])
 {
   web_socket *ws = websocket_new() ;
+
+  ws->on_open = on_open ;
   websocket_init( ws, "ws://localhost:8080" ) ;
-  ws->on_open = &on_open ;
   return 0 ;
 }
