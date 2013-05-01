@@ -50,5 +50,5 @@ struct _web_socket {
   short _ready_state ;
   long _buffered_amount ;
   char * _protocol ;
-  
+  int _socket ;
 } ;

@@ -100,16 +100,13 @@ void websocket_init( web_socket *self, char *ws_uri ){
   if (n < 0) 
     fprintf(stderr, "ERROR reading from socket\n");
 
-  if ( self->on_open ){
-    self->on_open(self) ;
-  }
-
   char delims[] = "\n" ;
   char *res = NULL ;
   char *result = NULL ;
   bool is_ws = false ;
   bool upgrade = false ;
   bool upswitch = false ;
+  bool nonce_agreed = false ;
 
   res = strtok( buf, delims ) ;
   result = (char *) malloc ((strlen(res) + 1) * sizeof( char )) ;
@@ -144,17 +141,26 @@ void websocket_init( web_socket *self, char *ws_uri ){
                    *server_nonce == '\f' ||
                    *server_nonce == '\r') server_nonce++;
 
-            printf("NONCE received: |%s|\n", server_nonce ) ;
-            char compare[80] ;
-            unsigned char hash[21] ;
+            char *end ;
+            end = server_nonce + strlen(server_nonce) - 1;
+            while(end > server_nonce && (*end == ' ' ||
+                                    *end == '\n' ||
+                                    *end == '\r')) end--;
+            
+            // Write new null terminator
+            *(end+1) = 0;
 
-            strcat( compare, b64nonce ) ;
+            //printf("NONCE received: |%s|\n", server_nonce ) ;
+            char compare[80] ;
+            unsigned char hash[20] ;
+
+            strcpy( compare, b64nonce ) ;
             strcat( compare, WS_KEY ) ;
+            //printf("comp: %s\n", compare ) ;
             SHA1(compare, strlen(compare), hash);
-            hash[21] = 0 ;
-            printf("comparison: \n{%s}\n", base64_encode(hash)) ;
-            printf("comparison: \n{%s}\n", server_nonce) ;
-            bool nonce_agreed = strcmp(base64_encode( hash ), server_nonce) == 0 ;
+            //printf("comparison: \n{%s}\n", base64_encode(hash)) ;
+            //printf("comparison: \n{%s}\n", server_nonce) ;
+            nonce_agreed = strcmp(base64_encode( hash ), server_nonce) == 0 ;
             printf("Agrees?: %d\n", strcmp(base64_encode( hash ), server_nonce) ) ;
           }
                
@@ -162,20 +168,28 @@ void websocket_init( web_socket *self, char *ws_uri ){
     result = strtok( NULL, delims );
   }
 
-  printf("Proceed: %s\n", upgrade && is_ws && upswitch ? "True" : "False") ;
+  printf("Proceed: %s\n", upgrade && is_ws && upswitch && nonce_agreed ? "True" : "False") ;
 
-  //printf("Echo from server: %s", buf);
-  close(sockfd);
+  if ( upgrade && is_ws && upswitch && nonce_agreed ){
+
+    if ( self->on_open ){
+      self->on_open(self) ;
+      self->_socket = sockfd ;
+    }
+  }
+  else{
+    close(sockfd);
+  }
 
   /* 
      @@TODO Implement this according to the spec.
    */
 }
 
-/* 
-   Destroy/free all resources used
-
- */
+void websocket_close( web_socket *self ){
+  if ( self->_socket )
+    close( self->_socket ) ;
+}
 
 void websocket_destroy( web_socket *self ){
   free (self->_url) ;
@@ -187,6 +201,9 @@ void websocket_binary_type( web_socket *self, char *type ){
 }
 
 void websocket_send( web_socket *self, char *message ){
+
+  websocket_frame_start( self->_socket ) ;
+  websocket_frame_text( message ) ;
   /*
 
     @@TODO Implement me!
