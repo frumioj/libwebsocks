@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
+#include <openssl/sha.h>
 
 #include "utils.h"
 #include "cencode.h"
@@ -16,6 +17,9 @@
 #define PORT_DELIM ":"
 #define BUFSIZE 1024
 #define NONCE_SIZE 16
+#define WS_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+typedef enum { false, true } bool;
 
 web_socket *websocket_new( void ){
   return (struct _web_socket *) malloc( sizeof( struct _web_socket )) ;
@@ -65,14 +69,14 @@ void websocket_init( web_socket *self, char *ws_uri ){
     exit(0) ;
   }
 
-  char *hrequest =
-     "GET / HTTP/1.1\r\n"
-     "Upgrade: WebSocket\r\n"
-     "Connection: Upgrade\r\n"
-     "Host: localhost:8080\r\n"
-     "Sec-WebSocket-Key: 42VhyIDNJjphjqRMidI1Tw==\r\n" 
-     "Sec-WebSocket-Version: 13\r\n"
-     "\r\n" ;
+  /* char *hrequest = */
+  /*    "GET / HTTP/1.1\r\n" */
+  /*    "Upgrade: WebSocket\r\n" */
+  /*    "Connection: Upgrade\r\n" */
+  /*    "Host: localhost:8080\r\n" */
+  /*    "Sec-WebSocket-Key: 42VhyIDNJjphjqRMidI1Tw==\r\n"  */
+  /*    "Sec-WebSocket-Version: 13\r\n" */
+  /*    "\r\n" ; */
 
   http_request *request = http_request_new() ;
   http_request_init( request, GET, ws_uri ) ;
@@ -84,7 +88,7 @@ void websocket_init( web_socket *self, char *ws_uri ){
 
   char *http_request = http_request_as_string( request ) ;
 
-  int n = write(sockfd, hrequest, strlen(hrequest));
+  int n = write(sockfd, http_request, strlen(http_request));
 
   if (n < 0) 
     fprintf(stderr,"ERROR writing to socket\n");
@@ -100,9 +104,68 @@ void websocket_init( web_socket *self, char *ws_uri ){
     self->on_open(self) ;
   }
 
-  printf("Echo from server: %s", buf);
-  close(sockfd);
+  char delims[] = "\n" ;
+  char *res = NULL ;
+  char *result = NULL ;
+  bool is_ws = false ;
+  bool upgrade = false ;
+  bool upswitch = false ;
 
+  res = strtok( buf, delims ) ;
+  result = (char *) malloc ((strlen(res) + 1) * sizeof( char )) ;
+  strcpy( result, res ) ;
+
+  char * end ;
+
+  end = result + strlen( result) - 1 ;
+  end = 0 ;
+
+  while( result != NULL ) {
+
+    if ( strcasestr( result, "HTTP" ) != NULL &&
+         strcasestr( result, "101" ) != NULL )
+      upswitch = true ;
+    else 
+      if ( strcasestr( result, "connection" ) != NULL &&
+         strcasestr( result, "upgrade" ) != NULL )
+        upgrade = true ;
+      else 
+        if ( strcasestr( result, "upgrade" ) != NULL &&
+             strcasestr( result, "websocket" ) != NULL )
+          is_ws = true ;
+        else
+          if ( strcasestr( result, "sec-websocket-accept" ) != NULL){
+            char *server_nonce = strdup( strstr( result, ":" ) + 1) ;
+
+            while (*server_nonce == ' ' || 
+                   *server_nonce == '\t' || 
+                   *server_nonce == '\n' || 
+                   *server_nonce == '\v' ||
+                   *server_nonce == '\f' ||
+                   *server_nonce == '\r') server_nonce++;
+
+            printf("NONCE received: |%s|\n", server_nonce ) ;
+            char compare[80] ;
+            unsigned char hash[21] ;
+
+            strcat( compare, b64nonce ) ;
+            strcat( compare, WS_KEY ) ;
+            SHA1(compare, strlen(compare), hash);
+            hash[21] = 0 ;
+            printf("comparison: \n{%s}\n", base64_encode(hash)) ;
+            printf("comparison: \n{%s}\n", server_nonce) ;
+            bool nonce_agreed = strcmp(base64_encode( hash ), server_nonce) == 0 ;
+            printf("Agrees?: %d\n", strcmp(base64_encode( hash ), server_nonce) ) ;
+          }
+               
+    printf( "result is %s\n", result );    
+    result = strtok( NULL, delims );
+  }
+
+  printf("Proceed: %s\n", upgrade && is_ws && upswitch ? "True" : "False") ;
+
+  //printf("Echo from server: %s", buf);
+  close(sockfd);
 
   /* 
      @@TODO Implement this according to the spec.
@@ -130,4 +193,5 @@ void websocket_send( web_socket *self, char *message ){
 
    */
 }
+
 
