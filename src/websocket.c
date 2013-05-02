@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "cencode.h"
 #include "http_request.h"
+#include "websocket_frame.h"
 #include "websocket.h"
 
 #define SCHEME_DELIM "://"
@@ -202,13 +203,19 @@ void websocket_binary_type( web_socket *self, char *type ){
 
 void websocket_send( web_socket *self, char *message ){
 
-  websocket_frame_start( self->_socket ) ;
-  websocket_frame_text( message ) ;
-  /*
+  websocket_frame *frame = websocket_frame_new() ;
 
-    @@TODO Implement me!
-
-   */
+  websocket_frame_set_length( frame, strlen(message ) ) ;
+  websocket_frame_set_opcode( frame, WS_TEXT ) ;
+  websocket_frame_set_mask( frame, WS_NOMASK ) ;
+  websocket_frame_set_data( frame, message ) ;
+  websocket_frame_set_fin( frame, WS_FIN ) ;
+  websocket_send_frame( self, frame ) ;
 }
 
+void websocket_send_frame( web_socket *self, websocket_frame *frame ){
 
+  char *frame = websocket_frame_as_string( frame ) ;
+  write(socket, frame, strlen( frame )) ;
+  
+}
