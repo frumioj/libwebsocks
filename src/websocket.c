@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <openssl/sha.h>
+#include <openssl/rand.h>
 
 #include "utils.h"
 #include "cencode.h"
@@ -173,9 +174,10 @@ void websocket_init( web_socket *self, char *ws_uri ){
 
   if ( upgrade && is_ws && upswitch && nonce_agreed ){
 
+    self->_socket = sockfd ;
+
     if ( self->on_open ){
       self->on_open(self) ;
-      self->_socket = sockfd ;
     }
   }
   else{
@@ -203,19 +205,38 @@ void websocket_binary_type( web_socket *self, char *type ){
 
 void websocket_send_frame( web_socket *self, websocket_frame *frame ){
 
-  char *frame_text = websocket_frame_as_string( frame ) ;
-  write(socket, frame_text, strlen( frame_text )) ;
+  int length ;
+  unsigned char *frame_text ;
+
+  frame_text = websocket_frame_as_string( frame, &length ) ;
+
+  int i ;
+
+  for( i = 0 ; i <= length  ; i++ ){
+    printf("0x%02hhx ", frame_text[i]) ;
+  }
+
+  printf("writing to socket....\n") ;
+  int bytes = write(self->_socket, frame_text, length+1) ;
   
+  printf("Wrote: %d\n", bytes ) ;
 }
 
 void websocket_send( web_socket *self, char *message ){
 
   websocket_frame *frame = websocket_frame_new() ;
 
-  websocket_frame_set_opcode( frame, WS_TEXT ) ;
-  websocket_frame_set_mask( frame, WS_NOMASK ) ;
+  unsigned char mask[4] ;
+
+  int err = RAND_bytes( mask, 4 ) ;
+
+  /* mask[0] = 0x37 ; */
+  /* mask[1] = 0xfa ; */
+  /* mask[2] = 0x21 ; */
+  /* mask[3] = 0x3d ; */
+
+  websocket_frame_init( frame, WS_TEXT, mask ) ;
   websocket_frame_set_data( frame, message ) ;
-  websocket_frame_set_fin( frame, WS_FIN ) ;
   websocket_send_frame( self, frame ) ;
 }
 

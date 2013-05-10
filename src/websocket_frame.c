@@ -15,8 +15,8 @@ void websocket_frame_set_opcode( websocket_frame *self, int opcode ){
   self->_opcode = opcode ;
 }
 
-void websocket_frame_set_mask( websocket_frame *self, int mask ){
-  self->_mask = mask ;
+void websocket_frame_set_mask( websocket_frame *self, unsigned char mask[4] ){
+  memcpy( self->_mask, mask, 4 ) ;
 }
 
 void websocket_frame_set_data( websocket_frame *self, char *message ){
@@ -27,6 +27,14 @@ void websocket_frame_set_fin( websocket_frame *self, int fin ){
   self->_fin = fin ;
 }
 
+void websocket_frame_init( websocket_frame *self, int opcode, unsigned char mask[4]){
+  self->_opcode = opcode ;
+  if ( mask != NULL )
+    memcpy( self->_mask, mask, 4 ) ;
+  else
+    memset( self->_mask, 0, 4 ) ;
+}
+
 unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size ){
   unsigned int b1, b2 ;
   unsigned long long data_len ;
@@ -34,6 +42,7 @@ unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size
   unsigned long long b4 ;
   unsigned char *result ;
   int len_len ;
+  int i ;
 
   b1 = 0x80 | ( self->_opcode & 0x0f ) ;
   
@@ -62,25 +71,68 @@ unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size
         len_len = 8 ;
       }
 
-  int alloc_len = 2 + len_len + data_len ;
+
+  int int_mask = self->_mask[3] << 24 | self->_mask[2] << 16 | self->_mask[1] << 8 | self->_mask[0];
+  int mask_len = 0 ;
+
+  printf("INT MASK = %d\n", int_mask ) ;
+
+  if ( int_mask > 0 ){
+    mask_len = 4 ;
+    b2 = b2 | 0x80 ;
+  }
+
+  int alloc_len = 1 + len_len + data_len + mask_len ;
 
   result = (unsigned char *) malloc( alloc_len );
 
   result[0] = b1 ;
 
-  if ( data_len <= 125 ){
+  if ( len_len == 0 ){
     result[1] = b2 ;
-    strcpy( &result[2], self->_data ) ;
+
+    if ( mask_len > 0 ){
+      result[2] = self->_mask[0] ;
+      result[3] = self->_mask[1] ;
+      result[4] = self->_mask[2] ;
+      result[5] = self->_mask[3] ;
+    }
+
+    for (i=0;i<=data_len;i++){
+      if ( mask_len == 0 )
+        result[2+mask_len+i] = self->_data[i] ;
+      else{
+        unsigned int mask_index = i % 4 ;
+        printf("Mask index: %d\n", mask_index ) ;
+        result[2+mask_len+i] = self->_data[i] ^ self->_mask[mask_index] ;
+      }
+    }
   }
   else 
-    if ( data_len > 125 && data_len < 65536 ){
+    if ( len_len == 2 ){
       result[1] = b2 ;
       result[2] = ((data_len >> 8) & 0xff ) ;
       result[3] = data_len & 0xff ;
       printf("first! 0x%02hhx\n", result[2]) ;
       printf("secx! 0x%02hhx\n", result[3]) ;
 
-      strcpy( &result[4], self->_data ) ;
+      if ( mask_len > 0 ){
+        result[4] = self->_mask[0] ;
+        result[5] = self->_mask[1] ;
+        result[6] = self->_mask[2] ;
+        result[7] = self->_mask[3] ;
+      }
+
+      //strcpy( &result[4+mask_len], self->_data ) ;
+      for (i=0;i<=data_len;i++){
+
+        if ( mask_len == 0 )
+          result[4+mask_len+i] = self->_data[i] ;
+        else{
+          int mask_index = i % 4 ;
+          result[4+mask_len+i] = self->_data[i] ^ self->_mask[mask_index] ;
+        }
+      }
     }
     else{
       printf("BIG\n") ;
@@ -94,7 +146,23 @@ unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size
       result[8] = ((data_len >> 8) & 0xff ) ; ;
       result[9] = data_len & 0xff ;
 
-      strcpy( &result[10], self->_data ) ;
+      if ( mask_len > 0 ){
+        result[10] = self->_mask[0] ;
+        result[11] = self->_mask[1] ;
+        result[12] = self->_mask[1] ;
+        result[13] = self->_mask[1] ;
+      }
+
+      for (i=0;i<=data_len;i++){
+        if ( mask_len == 0 )
+          result[10+mask_len+i] = self->_data[i] ;
+        else{
+          unsigned int mask_index = i % 4 ;
+          printf("Mask index: %d\n", mask_index ) ;
+          result[10+mask_len+i] = self->_data[i] ^ self->_mask[mask_index] ;
+        }
+      }
+
     }
 
   /*printf("about to assign \n") ;
@@ -118,15 +186,24 @@ unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size
 int main(int argc, char *argv[ ])
 {
   websocket_frame *wf = websocket_frame_new() ;
-  wf->_opcode = 0x01 ;
+
+  unsigned char mask[4] ;
+  mask[0] = 0x37 ;
+  mask[1] = 0xfa ;
+  mask[2] = 0x21 ;
+  mask[3] = 0x3d ;
+
+  websocket_frame_init( wf, 0x01, mask ) ;
+
+  //wf->_opcode = 0x01 ;
 
   // 5 byte data
 
-  //wf->_data = "Hello" ;
+  wf->_data = "Hello" ;
 
   // 256-byte test
 
-  wf->_data = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloa" ;
+  //wf->_data = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloa" ;
 
   // 64k test
 
