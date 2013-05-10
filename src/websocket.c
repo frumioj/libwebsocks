@@ -201,11 +201,17 @@ void websocket_binary_type( web_socket *self, char *type ){
   strcpy( type, self->_binary_type ) ;
 }
 
+void websocket_send_frame( web_socket *self, websocket_frame *frame ){
+
+  char *frame_text = websocket_frame_as_string( frame ) ;
+  write(socket, frame_text, strlen( frame_text )) ;
+  
+}
+
 void websocket_send( web_socket *self, char *message ){
 
   websocket_frame *frame = websocket_frame_new() ;
 
-  websocket_frame_set_length( frame, strlen(message ) ) ;
   websocket_frame_set_opcode( frame, WS_TEXT ) ;
   websocket_frame_set_mask( frame, WS_NOMASK ) ;
   websocket_frame_set_data( frame, message ) ;
@@ -213,9 +219,4 @@ void websocket_send( web_socket *self, char *message ){
   websocket_send_frame( self, frame ) ;
 }
 
-void websocket_send_frame( web_socket *self, websocket_frame *frame ){
 
-  char *frame = websocket_frame_as_string( frame ) ;
-  write(socket, frame, strlen( frame )) ;
-  
-}

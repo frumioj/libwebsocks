@@ -1,4 +1,6 @@
 #define WS_FIN 0x01
+#define WS_TEXT 0x01
+#define WS_NOMASK 0x00
 
 typedef struct _websocket_frame websocket_frame ;
 
@@ -19,4 +21,4 @@ void websocket_frame_set_opcode( websocket_frame *self, int opcode ) ;
 void websocket_frame_set_mask( websocket_frame *self, int mask ) ;
 void websocket_frame_set_data( websocket_frame *self, char *message ) ;
 void websocket_frame_set_fin( websocket_frame *self, int fin ) ;
-
+unsigned char *websocket_frame_as_string( websocket_frame *self, int *frame_size ) ;
