@@ -8,6 +8,7 @@
 #include <netdb.h> 
 #include <openssl/sha.h>
 #include <openssl/rand.h>
+#include <event2/event.h>
 
 #include "utils.h"
 #include "cencode.h"
@@ -22,6 +23,15 @@
 #define WS_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 typedef enum { false, true } bool;
+
+int setnonblock(int fd)
+{
+  int flags;
+
+  flags = fcntl(fd, F_GETFL);
+  flags |= O_NONBLOCK;
+  fcntl(fd, F_SETFL, flags);
+}
 
 web_socket *websocket_new( void ){
   return (struct _web_socket *) malloc( sizeof( struct _web_socket )) ;
@@ -179,14 +189,22 @@ void websocket_init( web_socket *self, char *ws_uri ){
     if ( self->on_open ){
       self->on_open(self) ;
     }
+
+    struct event_base *base;
+    struct event*server_recvd ;
+    
+    base = event_base_new() ;
+
+    server_recvd = event_new(base, self->_socket, EV_READ|EV_PERSIST, websocket_onread, event_self_cbarg()) ;
+
+    event_add(server_recvd, NULL);
+
+    event_base_dispatch(base) ;
+
   }
   else{
     close(sockfd);
   }
-
-  /* 
-     @@TODO Implement this according to the spec.
-   */
 }
 
 void websocket_close( web_socket *self ){
